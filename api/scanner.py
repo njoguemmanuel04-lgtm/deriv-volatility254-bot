@@ -8,7 +8,7 @@ import websocket
 
 # --- CONFIGURATION ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_FROM_BOTFATHER")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "@YOUR_CHANNEL_NAME")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "7704749217")
 DERIV_APP_ID = "59828"
 
 VOLATILITY_SYMBOLS = {
@@ -26,18 +26,20 @@ VOLATILITY_SYMBOLS = {
     "1HZ250V": "Volatility 250 (1s) Index",
 }
 
-def send_telegram_signal(symbol_name, direction, strategy_name):
-    direction_emoji = "🟢 **UP (BUY)**" if direction == "UP" else "🔴 **DOWN (SELL)**"
+def send_telegram_signal(symbol_name, direction, strategy_name, current_price):
+    action_text = "BUY (UP)" if direction == "UP" else "SELL (DOWN)"
+    
     message = (
-        f"⚡ **DERIV MULTIPLIER SIGNAL**\n\n"
-        f"📊 **Asset:** {symbol_name}\n"
-        f"🎯 **Strategy:** {strategy_name}\n"
-        f"🚀 **Direction:** {direction_emoji}\n\n"
-        f"⚙️ **Recommended Multiplier:** `x50`\n"
-        f"💰 **Suggested Stake:** `$1.00`\n\n"
-        f"🎯 **Take Profit (USD):** `+$5.00`\n"
-        f"🛑 **Stop Loss (USD):** `-$0.75`"
+        f"🥇 **DERIV MULTIPLIER SIGNAL**\n"
+        f"📊 **{symbol_name}**\n\n"
+        f"📍 **Entry (Live):** `{current_price:.2f}`\n"
+        f"📈 **Signal:** `{action_text}` via {strategy_name}\n\n"
+        f"🎯 **Take Profit:** `+$5.00 (USD)`\n"
+        f"🛑 **Stop Loss:** `-$0.75 (USD)`\n\n"
+        f"⚙️ **Stake:** `$1.00` | **Multiplier:** `x50`\n"
+        f"⚖️ **Risk Management:** Multiplier Loss capped at Stake."
     )
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:
@@ -78,16 +80,17 @@ class handler(BaseHTTPRequestHandler):
                 
                 closes = [c["close"] for c in candles]
                 s = pd.Series(closes)
+                current_price = closes[-1]
                 
                 # 1. Moving Average Crossover
                 ema_fast = s.ewm(span=5, adjust=False).mean()
                 ema_slow = s.ewm(span=15, adjust=False).mean()
                 if ema_fast.iloc[-2] <= ema_slow.iloc[-2] and ema_fast.iloc[-1] > ema_slow.iloc[-1]:
-                    send_telegram_signal(name, "UP", "MA Crossover")
+                    send_telegram_signal(name, "UP", "MA Crossover", current_price)
                     triggered_count += 1
                     continue
                 elif ema_fast.iloc[-2] >= ema_slow.iloc[-2] and ema_fast.iloc[-1] < ema_slow.iloc[-1]:
-                    send_telegram_signal(name, "DOWN", "MA Crossover")
+                    send_telegram_signal(name, "DOWN", "MA Crossover", current_price)
                     triggered_count += 1
                     continue
                 
@@ -95,10 +98,10 @@ class handler(BaseHTTPRequestHandler):
                 recent_high = max(closes[-15:-1])
                 recent_low = min(closes[-15:-1])
                 if closes[-1] > recent_high:
-                    send_telegram_signal(name, "UP", "Price Breakout")
+                    send_telegram_signal(name, "UP", "Price Breakout", current_price)
                     triggered_count += 1
                 elif closes[-1] < recent_low:
-                    send_telegram_signal(name, "DOWN", "Price Breakout")
+                    send_telegram_signal(name, "DOWN", "Price Breakout", current_price)
                     triggered_count += 1
                     
             except Exception as e:
